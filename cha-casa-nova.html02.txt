@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Lista de Presentes</title>
+<style>
+  :root{--bg:#f8f6f2;--card:#fff;--accent:#b89f7a;--ok:#25D366;--text:#4a403a}
+  body{font-family:"Poppins",system-ui,Arial; background:var(--bg); color:var(--text); margin:0}
+  header{background:#f4e9db;text-align:center;padding:18px 12px 28px;border-bottom:3px solid #d1bfa7}
+  header h1{margin:8px 0 4px;font-size:1.6rem}
+  header p{margin:0;color:#5a524c}
+  .top-contact{max-width:1200px;margin:18px auto;padding:0 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .whatsapp-inline{display:inline-block;background:var(--ok);color:#fff;padding:10px 14px;border-radius:8px;text-decoration:none;font-weight:600}
+  .container{max-width:1200px;margin:18px auto;padding:0 20px 60px;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px}
+  .card{background:var(--card);border-radius:10px;padding:16px;box-shadow:0 6px 18px rgba(0,0,0,0.06);position:relative;display:flex;flex-direction:column;gap:10px}
+  .card h3{margin:0;font-size:1.05rem;color:#3b322c}
+  .card a{color:var(--accent);text-decoration:none;font-weight:600}
+  .card .meta{font-size:0.9rem;color:#6b615a;word-break:break-all}
+  .btn{background:var(--ok);color:#fff;border:none;padding:10px;border-radius:8px;cursor:pointer;font-weight:700}
+  .btn[disabled]{opacity:0.5;cursor:not-allowed}
+  .badge{position:absolute;top:12px;right:12px;background:var(--accent);color:#fff;padding:6px 8px;border-radius:6px;font-size:0.8rem}
+  .badge.sendo{background:#ffb74d}
+  .badge.comprado{background:#4caf50}
+  .notice{max-width:1200px;margin:12px auto;padding:0 20px}
+  .erro{background:#fff0f0;border:1px solid #f2c2c2;color:#900;padding:10px;border-radius:8px;margin-bottom:10px;display:none}
+  footer{max-width:1200px;margin:28px auto;padding:0 20px 40px;display:flex;justify-content:space-between;align-items:center;gap:12px}
+  .admin-btn{background:#333;color:#fff;padding:8px 12px;border-radius:8px;border:none;cursor:pointer}
+  .small{font-size:0.9rem;color:#6b615a}
+  @media(max-width:420px){ header h1{font-size:1.25rem} .card{padding:12px} .top-contact{padding:0 12px} }
+</style>
+</head>
+<body>
+
+<header>
+  <img src="https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1600&q=80" alt="" style="width:100%;max-height:220px;object-fit:cover;border-bottom:3px solid #d1bfa7">
+  <h1>Lista de Presentes</h1>
+  <p>💛 Escolha um presente para ajudar a montar o novo lar com carinho.</p>
+</header>
+
+<div class="top-contact">
+  <!-- WhatsApp visível logo abaixo da introdução -->
+  <a id="whatsapp-main" class="whatsapp-inline" href="#" target="_blank">💬 Entre em contato!</a>
+  <span class="small">Use o WhatsApp para avisar que vai comprar e enviar o comprovante.</span>
+</div>
+
+<div class="notice">
+  <div id="erro" class="erro"></div>
+</div>
+
+<div class="container" id="lista-presentes"></div>
+
+<footer>
+  <div class="small">Reserva automática: quando alguém clicar, o item ficará <strong>"Sendo visitado"</strong> por <span id="reserve-minutes">60</span> minutos.</div>
+  <div style="display:flex;gap:10px;align-items:center">
+    <button id="admin-enter" class="admin-btn">Entrar como admin</button>
+    <div class="small">Modo admin: confirme compras ou libere reservas.</div>
+  </div>
+</footer>
+
+<!-- Firebase SDK (compat) -->
+<script src="https://www.gstatic.com/firebasejs/10.15.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.15.0/firebase-firestore-compat.js"></script>
+
+<script>
+/* ======= CONFIG ======= */
+/* Cole suas credenciais do Firebase aqui para ativar sincronização real.
+   Se deixar como está, a lista vai funcionar em visualização local, mas sem reserva global. */
+const firebaseConfig = {
+  apiKey: "SUA_API_KEY",
+  authDomain: "SEU_PROJETO.firebaseapp.com",
+  projectId: "SEU_PROJETO",
+  storageBucket: "SEU_PROJETO.appspot.com",
+  messagingSenderId: "SEU_SENDER_ID",
+  appId: "SEU_APP_ID"
+};
+
+/* Tempo da reserva em minutos */
+const RESERVATION_MINUTES = 60;
+
+/* Número do WhatsApp (sem +): */
+const OWNER_WHATSAPP = "5511950392090"; // +55 11 95039-2090
+
+/* Senha do admin (visível no front; pra solução simples) */
+const ADMIN_PASSWORD = "limaAdmin2025";
+/* ===================== */
+
+/* Lista completa dos produtos (copiada do seu código antigo) */
+const itens = [
+  { nome: "Mop Giratório 8 Litros Fit", link: "https://s.shopee.com.br/AUlWWlxNPO" },
+  { nome: "Rodo Limpador De Silicone Mágico", link: "https://s.shopee.com.br/qb117DgJm" },
+  { nome: "Gancho Multiuso Suporte Com Adesivo", link: "https://s.shopee.com.br/60J7Ad2PMY" },
+  { nome: "Escova de Silicone para Vaso Sanitário", link: "https://s.shopee.com.br/3VbmC377c9" },
+  { nome: "Varal Dobrável Inox", link: "https://s.shopee.com.br/4VUJNuG6tG" },
+  { nome: "Kit Banheiro Lavabo 3 peças", link: "https://s.shopee.com.br/gHaosUIbX" },
+  { nome: "Mesa Prateleira de Sacada", link: "https://s.shopee.com.br/4ArSzKlRC7" },
+  { nome: "Kit Rodinho de Pia", link: "https://s.shopee.com.br/BLKDzmzfp" },
+  { nome: "Pratos de Sobremesa Nadir Duralex", link: "https://s.shopee.com.br/5VMqZoJUEH" },
+  { nome: "Jogo de Pratos Duralex", link: "https://s.shopee.com.br/VyAcdOzFc" },
+  { nome: "Suporte Porta Vassoura", link: "https://s.shopee.com.br/8ANbkjvKO2" },
+  { nome: "Cesto com Alça Multiuso", link: "https://s.shopee.com.br/1gA80oO4JI" },
+  { nome: "Porta Chaves MDF", link: "https://s.shopee.com.br/1gA80pJKjz" },
+  { nome: "Jogo de Taças Diamante 340ml", link: "https://s.shopee.com.br/4fnjaM32ZQ" },
+  { nome: "Kit Tapete Passadeira", link: "https://s.shopee.com.br/9AG8wdYJ2m" },
+  { nome: "Ganchos de Parede Multiuso", link: "https://s.shopee.com.br/1qTYDBZ5Ob" },
+  { nome: "Conjunto de 5 Potes Herméticos", link: "https://s.shopee.com.br/10uRDhAZzy" },
+  { nome: "Kit 10 Cestos Organizadores", link: "https://s.shopee.com.br/3Ayvni1alx" },
+  { nome: "Cortina Blackout com Voil", link: "https://s.shopee.com.br/3qEcaxKa2h" },
+  { nome: "Tapete Banheiro Oval", link: "https://s.shopee.com.br/3AyvnkR77H" },
+  { nome: "Tapete Piso Saída Box", link: "https://s.shopee.com.br/5VMqa34czS" },
+  { nome: "Cesto de Lixo 5L", link: "https://s.shopee.com.br/9KZZ96pdAQ" },
+  { nome: "Cesto de Roupa Rattan 50L", link: "https://s.shopee.com.br/70BeMpcBDM" },
+  { nome: "Suporte Banheiro Adesivo", link: "https://s.shopee.com.br/20myPfyjmq" },
+  { nome: "Fruteira Cesta Aramada", link: "https://s.shopee.com.br/9fCPXmiLXF" },
+  { nome: "Organizador de Armário (5 unid.)", link: "https://br.shp.ee/ngoyjV1" },
+  { nome: "Luva de Silicone Térmica", link: "https://br.shp.ee/fS5XHfs" },
+  { nome: "Organizador de Gavetas", link: "https://br.shp.ee/Sghxo4m" },
+  { nome: "Jogo 6 Copos de Vidro Adhara", link: "https://br.shp.ee/KYnyZ1D" },
+  { nome: "Porta Frios Triplo Acrílico", link: "https://br.shp.ee/eWZJyiQ" }
+];
+
+const listaEl = document.getElementById('lista-presentes');
+const erroBox = document.getElementById('erro');
+document.getElementById('reserve-minutes').innerText = RESERVATION_MINUTES;
+
+/* Inicializa Firebase com tratamento de erro */
+let db = null;
+try {
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.firestore();
+} catch (e) {
+  console.warn("Firebase não configurado corretamente:", e);
+  erroBox.style.display = 'block';
+  erroBox.innerText = "Firebase não configurado — sincronização global desligada. Cole as credenciais para ativar.";
+}
+
+/* visitorId para identificar a reserva do usuário */
+function getVisitorId(){
+  let id = localStorage.getItem('visitorId');
+  if(!id){
+    id = 'v_' + Math.random().toString(36).slice(2,10);
+    localStorage.setItem('visitorId', id);
+  }
+  return id;
+}
+const visitorId = getVisitorId();
+
+/* helper doc id */
+function itemDocId(item){
+  return btoa(item.link);
+}
+
+/* Se tiver Firestore, usa onSnapshot para realtime; se não, render local */
+if(db){
+  db.collection('presentes').onSnapshot(async snap => {
+    if(snap.empty){
+      const batch = db.batch();
+      itens.forEach(it => {
+        const docRef = db.collection('presentes').doc(itemDocId(it));
+        batch.set(docRef, {
+          nome: it.nome,
+          link: it.link,
+          status: 'disponivel',
+          updatedAt: Date.now()
+        }, { merge: true });
+      });
+      await batch.commit();
+      return;
+    }
+    const data = {};
+    snap.docs.forEach(d => data[d.id] = d.data());
+    renderList(data);
+  }, err => {
+    console.error('onSnapshot erro:', err);
+    erroBox.style.display = 'block';
+    erroBox.innerText = 'Erro conectando ao Firestore. Verifique as credenciais.';
+  });
+} else {
+  renderList(null);
+}
+
+/* Renderiza lista (dataMap=null => todos disponiveis) */
+function renderList(dataMap){
+  listaEl.innerHTML = '';
+  itens.forEach(item => {
+    const id = itemDocId(item);
+    const data = dataMap ? (dataMap[id] || null) : null;
+
+    if(data && data.status === 'sendoVisitado' && data.reservaAte){
+      const agora = Date.now();
+      if(typeof data.reservaAte === 'object' && data.reservaAte.toMillis){
+        data.reservaAte = data.reservaAte.toMillis();
+      }
+      if(agora > data.reservaAte){
+        if(db){
+          db.collection('presentes').doc(id).get().then(doc => {
+            const docData = doc.data();
+            if(docData && docData.status === 'sendoVisitado' && docData.reservaAte <= agora){
+              db.collection('presentes').doc(id).set({ status: 'disponivel', reserverId: null, reservaAte: null, updatedAt: Date.now() }, { merge: true });
+            }
+          }).catch(e => console.warn('Erro liberando reserva expirada:', e));
+        }
+        data.status = 'disponivel';
+        data.reserverId = null;
+      }
+    }
+
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    if(data && data.status === 'sendoVisitado'){
+      const b = document.createElement('div'); b.className = 'badge sendo'; b.innerText = 'Sendo visitado 👀'; card.appendChild(b);
+    } else if(data && data.status === 'comprado'){
+      const b = document.createElement('div'); b.className = 'badge comprado'; b.innerText = 'Comprado ✅'; card.appendChild(b);
+    }
+
+    const title = document.createElement('h3'); title.innerText = item.nome;
+    const meta = document.createElement('div'); meta.className = 'meta'; meta.innerText = item.link;
+    const link = document.createElement('a'); link.href = item.link; link.target = '_blank'; link.innerText = 'Ver produto';
+
+    const btn = document.createElement('button'); btn.className = 'btn';
+    if(!data || data.status === 'disponivel' || !data.status){
+      btn.innerText = 'Escolher este presente';
+      btn.onclick = () => reservarItem(item);
+    } else if(data.status === 'sendoVisitado'){
+      if(data.reserverId === visitorId){
+        btn.innerText = 'Reservado por você (aguarde confirmação)';
+        btn.disabled = true;
+      } else {
+        btn.innerText = 'Indisponível no momento';
+        btn.disabled = true;
+      }
+    } else if(data.status === 'comprado'){
+      btn.innerText = 'Comprado';
+      btn.disabled = true;
+    }
+
+    card.appendChild(title);
+    card.appendChild(meta);
+    card.appendChild(link);
+    card.appendChild(btn);
+
+    if(data && data.status === 'sendoVisitado' && data.reserverId === visitorId){
+      const restante = document.createElement('div');
+      restante.className = 'small';
+      restante.style.marginTop = '6px';
+      restante.style.color = '#6b615a';
+      restante.innerText = 'Sua reserva está ativa — finalize a compra e envie o comprovante.';
+      card.appendChild(restante);
+    }
+
+    listaEl.appendChild(card);
+  });
+}
+
+/* Reserva item via transaction e abre WhatsApp com mensagem simples */
+async function reservarItem(item){
+  if(!db){
+    // fallback sem Firebase: abre zap com mensagem simples
+    abrirWhatsAppSimple(item);
+    return;
+  }
+  const id = itemDocId(item);
+  const docRef = db.collection('presentes').doc(id);
+
+  try {
+    await db.runTransaction(async tx => {
+      const doc = await tx.get(docRef);
+      const docData = doc.exists ? doc.data() : null;
+      const agora = Date.now();
+
+      if(!docData || docData.status === 'disponivel' || !docData.status){
+        const reservaAte = agora + RESERVATION_MINUTES * 60 * 1000;
+        tx.set(docRef, {
+          status: 'sendoVisitado',
+          reserverId: visitorId,
+          reserverAt: agora,
+          reservaAte: reservaAte,
+          updatedAt: agora,
+          nome: item.nome,
+          link: item.link
+        }, { merge: true });
+      } else {
+        throw new Error('Item não disponível');
+      }
+    });
+
+    abrirWhatsAppWithReserve(item);
+  } catch (e) {
+    console.warn('Reserva falhou:', e);
+    alert('Não foi possível reservar — atualize e tente novamente.');
+  }
+}
+
+/* Mensagem simples (sem reserva) */
+function abrirWhatsAppSimple(item){
+  const msg = encodeURIComponent(`Olá! Quero comprar: ${item.nome}\nLink: ${item.link}`);
+  window.open(`https://wa.me/${OWNER_WHATSAPP}?text=${msg}`, '_blank');
+}
+
+/* Mensagem pós-reserva (com código curto) */
+function abrirWhatsAppWithReserve(item){
+  const code = btoa(item.link).slice(0,12);
+  const msg = encodeURIComponent(`Acabei de reservar (código ${code}). Vou realizar a compra e enviar o comprovante.\nProduto: ${item.nome}\nLink: ${item.link}`);
+  window.open(`https://wa.me/${OWNER_WHATSAPP}?text=${msg}`, '_blank');
+}
+
+/* Admin */
+document.getElementById('admin-enter').addEventListener('click', async () => {
+  const senha = prompt('Senha de admin:');
+  if(!senha) return;
+  if(senha !== ADMIN_PASSWORD){
+    alert('Senha incorreta.');
+    return;
+  }
+  openAdminPanel();
+});
+
+async function openAdminPanel(){
+  if(!db){
+    alert('Painel admin requer Firebase configurado.');
+    return;
+  }
+  const modal = document.createElement('div');
+  modal.style.position = 'fixed';
+  modal.style.inset = '0';
+  modal.style.background = 'rgba(0,0,0,0.45)';
+  modal.style.display = 'flex';
+  modal.style.alignItems = 'center';
+  modal.style.justifyContent = 'center';
+  modal.style.zIndex = 9999;
+
+  const box = document.createElement('div');
+  box.style.width = '92%';
+  box.style.maxWidth = '760px';
+  box.style.maxHeight = '80vh';
+  box.style.overflow = 'auto';
+  box.style.background = '#fff';
+  box.style.borderRadius = '12px';
+  box.style.padding = '18px';
+  box.style.boxShadow = '0 12px 40px rgba(0,0,0,0.2)';
+
+  const h = document.createElement('h2'); h.innerText = 'Painel Admin';
+  const info = document.createElement('div'); info.className = 'small'; info.style.marginBottom='10px'; info.innerText = 'Marque Comprado ou Libere reservas.';
+  box.appendChild(h); box.appendChild(info);
+
+  const list = document.createElement('div'); list.style.display='grid'; list.style.gap='10px';
+  box.appendChild(list);
+
+  const closeBtn = document.createElement('button'); closeBtn.innerText = 'Fechar'; closeBtn.style.marginTop='12px'; closeBtn.className='admin-btn';
+  closeBtn.onclick = () => document.body.removeChild(modal);
+  box.appendChild(closeBtn);
+
+  modal.appendChild(box);
+  document.body.appendChild(modal);
+
+  const snap = await db.collection('presentes').get();
+  const dataMap = {};
+  snap.docs.forEach(d => dataMap[d.id] = d.data());
+  renderAdminList(dataMap, list);
+
+  const unsub = db.collection('presentes').onSnapshot(snap2 => {
+    const newMap = {};
+    snap2.docs.forEach(d => newMap[d.id] = d.data());
+    renderAdminList(newMap, list);
+  });
+
+  closeBtn.addEventListener('click', () => unsub());
+}
+
+function renderAdminList(dataMap, container){
+  container.innerHTML = '';
+  itens.forEach(item => {
+    const id = itemDocId(item);
+    const data = dataMap[id] || { nome: item.nome, link: item.link, status: 'disponivel' };
+
+    const row = document.createElement('div');
+    row.style.display = 'flex';
+    row.style.justifyContent = 'space-between';
+    row.style.alignItems = 'center';
+    row.style.border = '1px solid #eee';
+    row.style.padding = '8px';
+    row.style.borderRadius = '8px';
+    row.style.gap = '10px';
+
+    const left = document.createElement('div'); left.style.flex='1';
+    const nome = document.createElement('div'); nome.innerText = data.nome || item.nome; nome.style.fontWeight='700';
+    const status = document.createElement('div'); status.className='small'; status.style.color='#6b615a';
+    status.innerText = `Status: ${data.status || 'disponivel'}${data.reservaAte ? ' • reservaAte: ' + (new Date(data.reservaAte).toLocaleString()) : ''}`;
+    left.appendChild(nome); left.appendChild(status);
+
+    const right = document.createElement('div'); right.style.display='flex'; right.style.gap='8px';
+    const btnComprado = document.createElement('button'); btnComprado.innerText='Marcar Comprado'; btnComprado.className='btn';
+    btnComprado.onclick = async () => {
+      if(!confirm('Confirmar que este presente foi comprado? (isto bloqueará permanentemente)')) return;
+      await db.collection('presentes').doc(id).set({ status: 'comprado', updatedAt: Date.now() }, { merge: true });
+      alert('Marcado como comprado ✅');
+    };
+
+    const btnLiberar = document.createElement('button'); btnLiberar.innerText='Liberar Reserva'; btnLiberar.className='admin-btn';
+    btnLiberar.onclick = async () => {
+      if(!confirm('Liberar esta reserva? (isso tornará o item disponível novamente)')) return;
+      await db.collection('presentes').doc(id).set({ status: 'disponivel', reserverId: null, reservaAte: null, updatedAt: Date.now() }, { merge: true });
+      alert('Reserva liberada.');
+    };
+
+    const btnReset = document.createElement('button'); btnReset.innerText='Resetar (disponível)'; btnReset.className='admin-btn';
+    btnReset.onclick = async () => {
+      if(!confirm('Resetar para disponível e limpar metadados?')) return;
+      await db.collection('presentes').doc(id).set({ status: 'disponivel', reserverId: null, reservaAte: null, updatedAt: Date.now() }, { merge: true });
+      alert('Resetado.');
+    };
+
+    right.appendChild(btnComprado);
+    right.appendChild(btnLiberar);
+    right.appendChild(btnReset);
+
+    row.appendChild(left);
+    row.appendChild(right);
+    container.appendChild(row);
+  });
+}
+
+/* configura link do WhatsApp no topo */
+document.getElementById('whatsapp-main').href = `https://wa.me/${OWNER_WHATSAPP}?text=${encodeURIComponent('Olá!')} `;
+
+/* fallback sem Firebase */
+if(!db){
+  renderList(null);
+}
+</script>
+</body>
+</html>
